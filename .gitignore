@@ -1,0 +1,78 @@
+# ============================================================
+# Korean Painting 3D — .gitignore
+# Track CODE only. Large data, models, and paper binaries are excluded.
+# ============================================================
+
+# --- Large input datasets (not tracked) ---
+/data/
+/data_3d/
+/data_edge/
+/data_original_painting/
+/data_painting/
+/data_pseudo_realistic/
+
+# --- Third-party models / checkpoints (18GB+) ---
+/external/
+
+# --- Paper & media assets (large binaries: .hwp, .pdf, .docx, figures) ---
+/paper/
+/figures/
+/presentation/
+
+# --- Vendored third-party sources / heavy assets in docker ---
+/docker/**/example_images/
+/docker/**/assets/
+/docker/**/*.ckpt
+/docker/**/*.pth
+/docker/**/*.safetensors
+
+# --- Regenerable outputs / archives ---
+/outputs/
+/output_gifs/
+/_archive/
+/archive/
+/evaluation_results/
+/full/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Virtual environments ---
+venv*/
+.venv/
+env/
+ENV/
+
+# --- Caches ---
+.cache/
+
+# --- Tooling / agent state ---
+/.omc/
+/.claude/
+
+# --- Model weights / large binaries (anywhere) ---
+*.ckpt
+*.pth
+*.safetensors
+*.onnx
+*.hwp
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,65 @@
+# Korean Painting 3D - Evaluation Configuration
+# Usage: python -m kp3d.evaluation.run_all --config configs/eval_config.yaml
+
+# Data paths (relative to project root)
+data_dir: "data_original_painting/data_anno"
+image_dir: "data_original_painting/data_anno"
+output_dir: "evaluation_results"
+
+# Synthetic grid parameters (matching real scan characteristics)
+grid_period_x: 9
+grid_period_y: 7
+grid_modulation_b: 0.148
+grid_modulation_g: 0.074
+grid_modulation_r: 0.045
+
+# Synthetic occlusion types for inpainting evaluation
+occlusion_types:
+  - "center_ellipse"
+  - "center_rect"
+  - "random_blob"
+
+# Enhancement baselines (Stage 1: grid/weave removal)
+enhancement_baselines:
+  - "bilateral"
+  - "nlmeans"
+  - "median"
+  - "guided"
+  - "butterworth"
+
+# Inpainting baselines (Stage 4)
+inpainting_baselines:
+  - "opencv_telea"
+  - "opencv_ns"
+  - "lama"
+  - "mat"
+  - "sd_inpaint"
+  - "brushnet"
+  - "powerpaint"
+
+# Enhancement evaluation metrics
+enhancement_metrics:
+  - "psnr"
+  - "ssim"
+  - "edge_preservation"
+  - "grid_energy"
+  - "band_snr"
+  - "naturalness"
+
+# Inpainting evaluation metrics
+inpainting_metrics:
+  - "psnr"
+  - "ssim"
+  - "lpips"
+  - "cor"
+  - "bs"
+  - "tc"
+
+# Our method configuration
+# "quality" = alpha=0.7, peak_radius=2 (edge preservation priority)
+# "clean" = alpha=1.0, peak_radius=3 (maximum grid removal)
+weave_removal_preset: "quality"
+
+# Execution settings
+max_images: 0    # 0 = all images
+dry_run: false

@@ -1,0 +1,31 @@
+# Inpainting evaluation with annotation-based masks
+# Data: data/inpainting_test (352x352 and 128x128 images with LabelMe annotations)
+# Usage: python -m kp3d.evaluation.run_all inpainting --config configs/eval_inpainting_test.yaml
+
+data_dir: "data/inpainting_test"
+image_dir: "data/inpainting_test"
+output_dir: "evaluation_results"
+
+# Use annotation polygon masks instead of synthetic occlusion
+use_annotation_masks: true
+
+# Inpainting baselines (Stage 4)
+inpainting_baselines:
+  - "opencv_telea"
+  - "opencv_ns"
+  - "lama"
+  - "sd_inpaint"
+  - "brushnet"
+  - "powerpaint"
+
+# Inpainting evaluation metrics
+inpainting_metrics:
+  - "psnr"
+  - "ssim"
+  - "lpips"
+  - "cor"
+  - "bs"
+  - "tc"
+
+max_images: 0
+dry_run: false

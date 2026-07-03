@@ -1,0 +1,96 @@
+# KP3D Default Pipeline Configuration
+# Korean Painting 3D Preprocessing Pipeline
+#
+# === Contour Enhancement Research Findings ===
+# (See research/contour_enhancement/IDEA.md for details)
+#
+# 1. Edge Detection: Sobel is best (F1=0.908) vs Canny (F1=0.804)
+# 2. Processing Order: Extract edges BEFORE upscaling
+# 3. Restoration: Fading restoration preserves 99.9% of edges
+# 4. CLAHE Warning: Do NOT use CLAHE before restoration (10% F1 drop)
+# =============================================
+
+# Super-resolution module configuration
+superres:
+  enabled: true
+  model_name: "realesrgan"
+  scale: 4
+  tile_size: 512
+  tile_overlap: 32
+  half_precision: true
+  denoise_strength: 0.5
+  checkpoint_path: null  # Uses default model
+
+# Edge enhancement module configuration
+edge:
+  enabled: true
+  model_name: "smart_fusion"  # Changed to smart_fusion for Korean paintings
+  threshold: 0.5
+  nms: true
+  enhance_strength: 1.0
+  line_refinement: true
+  min_line_length: 10
+  checkpoint_path: null
+
+# Restoration module configuration (NEW)
+restoration:
+  enabled: true
+  method: "fading_noise"
+  strength: 0.8
+  preserve_edges: true
+  denoise_strength: 0.5
+  checkpoint_path: null
+
+# Edge resynthesis module configuration
+# Based on research/contour_enhancement experiments:
+#   - Sobel achieves F1=0.908 (best) vs Canny F1=0.804
+#   - Edge extraction BEFORE upscaling preserves contours
+#   - See research/contour_enhancement/IDEA.md for details
+edge_resynth:
+  enabled: true
+  edge_weight: 0.7           # Weight for original edges (higher = preserve more)
+  current_weight: 0.3        # Weight for current edges
+  unsharp_strength: 1.5      # Sharpening intensity
+  unsharp_radius: 1.0        # Sharpening radius
+  blend_mode: "weighted"     # weighted, max, overlay, softlight
+  preserve_original_edges: true
+  edge_detection_method: "sobel"  # sobel (recommended), canny, scharr
+
+# Shade normalization module configuration
+shade:
+  enabled: true
+  model_name: "shade_net"
+  target_illumination: 0.5
+  preserve_details: true
+  color_correction: true
+  gamma: 1.0
+  checkpoint_path: null
+
+# Output settings
+output:
+  output_dir: "outputs"
+  save_intermediate: true
+  format: "png"
+  quality: 95
+  create_visualization: true
+  visualization_layout: "grid"
+
+# Pipeline settings
+# Recommended processing order (based on contour_enhancement research):
+#
+# 1. restoration - Remove fading/noise (preserves 99.9% edges, no CLAHE needed)
+# 2. edge_resynth - Resynthesize original edges (Sobel method, F1=0.908)
+# 3. superres - Upscale final result (edges extracted BEFORE this step)
+#
+# Important: Original edges are extracted at pipeline start (before any processing)
+# This ensures contours are preserved through all transformations.
+processing_order:
+  - restoration
+  - edge_resynth
+  - superres
+
+device: "auto"  # auto, cpu, cuda, cuda:0, etc.
+batch_size: 1
+num_workers: 4
+seed: null  # Set for reproducibility
+verbose: true

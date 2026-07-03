@@ -1,0 +1,54 @@
+services:
+  wonder3d:
+    build:
+      context: ./triposr
+      dockerfile: Dockerfile
+    image: kp3d-wonder3d:latest
+    container_name: kp3d-wonder3d
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      # Input/output directories
+      - ../outputs:/output
+      - ../data_original_painting:/input
+      # Cache for model weights (persist across runs)
+      - wonder3d-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Default command - can be overridden
+    command: ["--help"]
+
+  # Alternative: TripoSR (lighter, faster)
+  triposr:
+    build:
+      context: ./triposr
+      dockerfile: Dockerfile.triposr
+    image: kp3d-triposr:latest
+    container_name: kp3d-triposr
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../outputs:/output
+      - ../data_original_painting:/input
+      - triposr-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - triposr
+
+volumes:
+  wonder3d-cache:
+  triposr-cache:

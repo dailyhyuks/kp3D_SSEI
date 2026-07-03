@@ -1,0 +1,48 @@
+# TripoSR Docker Container (Lighter alternative)
+# Fast single-image-to-3D reconstruction
+
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV TORCH_HOME=/cache/torch
+ENV HF_HOME=/cache/huggingface
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    git \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    ninja-build \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+WORKDIR /app
+
+# Install PyTorch (CUDA 12.8, supports sm_120 Blackwell)
+RUN pip install --no-cache-dir \
+    torch==2.7.0 \
+    torchvision==0.22.0 \
+    --index-url https://download.pytorch.org/whl/cu128
+
+# Install TripoSR and dependencies (include onnxruntime for rembg)
+RUN pip install --no-cache-dir \
+    numpy pillow trimesh transformers accelerate \
+    huggingface_hub einops omegaconf rembg tqdm \
+    opencv-python scikit-image onnxruntime
+
+RUN git clone https://github.com/VAST-AI-Research/TripoSR.git /app/TripoSR && \
+    grep -v -E "^(gradio|streamlit)" /app/TripoSR/requirements.txt > /app/TripoSR/req_inference.txt && \
+    pip install --no-cache-dir -r /app/TripoSR/req_inference.txt || true
+ENV PYTHONPATH=/app/TripoSR:$PYTHONPATH
+
+COPY inference_triposr.py /app/inference_triposr.py
+
+RUN mkdir -p /input /output /cache
+
+ENTRYPOINT ["python", "/app/inference_triposr.py"]
+CMD ["--help"]

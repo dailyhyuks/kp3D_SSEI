@@ -1,0 +1,48 @@
+###############################################################################
+# Wonder3D++ smoke-test container.
+#
+# Goal: verify that the hardest CUDA-extension deps (pytorch3d, nvdiffrast)
+# build cleanly against torch 2.7 + CUDA 12.8 (Blackwell sm_120). If this
+# image builds successfully we know the full Wonder3D++ container is feasible.
+###############################################################################
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;12.0+PTX"
+ENV MAX_JOBS=4
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3-pip python3.10-dev python3.10-venv \
+    git wget curl ca-certificates \
+    cmake build-essential ninja-build \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libglfw3 libglfw3-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+ && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1 \
+ && pip install --upgrade pip setuptools wheel ninja
+
+# Torch 2.7 + cu128 (matches our TripoSR container, Blackwell-compatible)
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 \
+    torch==2.7.0 torchvision==0.22.0
+
+# nvdiffrast (rasterization). Needs --no-build-isolation to see torch.
+RUN pip install --no-cache-dir --no-build-isolation \
+    "git+https://github.com/NVlabs/nvdiffrast.git"
+
+# pytorch3d -- the most fragile dep. Latest main supports recent torch.
+# --no-build-isolation so it sees our installed torch for CUDA arch detection.
+RUN pip install --no-cache-dir --no-build-isolation \
+    "git+https://github.com/facebookresearch/pytorch3d.git@stable" || \
+    pip install --no-cache-dir --no-build-isolation \
+    "git+https://github.com/facebookresearch/pytorch3d.git@main"
+
+# Verify imports succeed at build time
+RUN python -c "import torch; print('torch:', torch.__version__, 'cuda:', torch.version.cuda)" \
+ && python -c "import nvdiffrast; print('nvdiffrast: ok')" \
+ && python -c "import pytorch3d; print('pytorch3d:', pytorch3d.__version__)"
+
+CMD ["python", "-c", "import torch, pytorch3d, nvdiffrast; \
+print('SMOKETEST PASS:', torch.__version__, pytorch3d.__version__)"]
