@@ -46,8 +46,10 @@ def _first_peak(profile: np.ndarray) -> tuple[float, float]:
     Returns:
         (lag, value). 국소 최대가 없으면 (nan, 0.0).
     """
-    for i in range(2, len(profile) - 1):
-        if profile[i] > profile[i - 1] and profile[i] >= profile[i + 1]:
+    for i in range(2, len(profile)):
+        left_ok = profile[i] > profile[i - 1]
+        right_ok = (i + 1 >= len(profile)) or (profile[i] >= profile[i + 1])
+        if left_ok and right_ok:
             return float(i), float(profile[i])
     return float("nan"), 0.0
 
@@ -62,7 +64,14 @@ def estimate_weave_period(gray: np.ndarray) -> WeavePeriodResult:
     g = g - g.mean()
     f = np.fft.rfft2(g)
     ac = np.fft.irfft2(np.abs(f) ** 2, s=g.shape)
-    ac = ac / ac.flat[0]  # lag 0 = 1로 정규화
+
+    # Guard against flat-image case (ac.flat[0] == 0 causes division-by-zero)
+    if ac.flat[0] > 0:
+        ac = ac / ac.flat[0]  # lag 0 = 1로 정규화
+    else:
+        return WeavePeriodResult(period_x=float("nan"), period_y=float("nan"),
+                                 strength_x=0.0, strength_y=0.0)
+
     row = ac[0, : g.shape[1] // 2]
     col = ac[: g.shape[0] // 2, 0]
     px, sx = _first_peak(row)

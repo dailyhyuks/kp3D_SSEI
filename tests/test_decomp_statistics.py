@@ -41,3 +41,13 @@ def test_weave_strength_low_on_pure_noise():
     result = estimate_weave_period(img)
     assert result.strength_x < 0.3
     assert result.strength_y < 0.3
+
+
+def test_weave_period_on_flat_image():
+    """균일 이미지에서 nan 주기와 0 강도를 반환해야 한다."""
+    img = np.full((128, 128), 100.0)
+    result = estimate_weave_period(img)
+    assert np.isnan(result.period_x)
+    assert np.isnan(result.period_y)
+    assert result.strength_x == 0.0
+    assert result.strength_y == 0.0
