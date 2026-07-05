@@ -84,6 +84,11 @@ def measure_line_widths(line_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     keep = counts >= min_len
     skeleton = keep[labels] & (labels > 0)
 
+    # 빈 스켈레톤 조기 반환: distance transform 낭비 제거 (필터링 후)
+    if not skeleton.any():
+        width_map = np.zeros(mask.shape, dtype=np.float32)
+        return skeleton, width_map
+
     dist = distance_transform_edt(mask)
     width_map = np.zeros(mask.shape, dtype=np.float32)
     width_map[skeleton] = (dist[skeleton] * 2.0).astype(np.float32)

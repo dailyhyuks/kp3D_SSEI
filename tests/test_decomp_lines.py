@@ -76,3 +76,12 @@ def test_measure_line_widths_rejects_non_2d():
     """비2D 입력은 ValueError를 발생시켜야 한다."""
     with pytest.raises(ValueError):
         measure_line_widths(np.zeros(16, dtype=bool))
+
+
+def test_all_components_too_small():
+    """모든 성분이 크기 임계값보다 작으면 빈 스켈레톤을 반환해야 한다."""
+    mask = np.zeros((1000, 1000), dtype=bool)
+    mask[500, 500] = True  # 1px 성분 -> 대각선 0.5% 임계값 미달
+    skeleton, width_map = measure_line_widths(mask)
+    assert not skeleton.any()
+    assert float(width_map.max()) == 0.0
