@@ -4,5 +4,11 @@ from kp3d.modules.decomposition.statistics import (
     estimate_noise_sigma,
     estimate_weave_period,
 )
+from kp3d.modules.decomposition.structure import compute_structure_image
 
-__all__ = ["WeavePeriodResult", "estimate_noise_sigma", "estimate_weave_period"]
+__all__ = [
+    "WeavePeriodResult",
+    "estimate_noise_sigma",
+    "estimate_weave_period",
+    "compute_structure_image",
+]
