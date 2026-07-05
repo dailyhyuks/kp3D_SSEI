@@ -1,0 +1,44 @@
+"""Scale-space DoG 선 검출 + 스켈레톤/선폭 측정.
+
+단일 (sigma, k) DoG 대신 폭 범위를 커버하는 다중 스케일의 max 응답 사용
+(v2 설계 1.3: 단일 k=1.6 의존 제거, 다중 굵기 대응).
+"""
+import cv2
+import numpy as np
+
+
+def _derive_scales(min_width: float, max_width: float) -> np.ndarray:
+    """P-adapt: 폭 범위 [min, max]를 커버하는 sigma 목록을 유도.
+
+    sigma = width / 2 (선 단면 가우시안 근사에서 유도).
+    샘플 수 = 옥타브당 2개 (인접 스케일 비 sqrt(2) — scale-space 표준 샘플링).
+    """
+    lo, hi = min_width / 2.0, max_width / 2.0
+    num = max(3, int(np.ceil(np.log2(hi / lo) * 2)) + 1)
+    return np.geomspace(lo, hi, num=num)
+
+
+def detect_lines(
+    structure_gray: np.ndarray, min_width: float, max_width: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """어두운 선(먹선)의 scale-normalized DoG 응답과 이진 마스크를 반환.
+
+    Args:
+        structure_gray: 2D float 구조 이미지 (RGF 출력의 grayscale).
+        min_width, max_width: 검출 대상 선폭 범위 (px).
+    Returns:
+        (response, mask): response는 float64 (양수=선), mask는 bool.
+    """
+    g = np.asarray(structure_gray, dtype=np.float64)
+    response = np.zeros_like(g)
+    for s in _derive_scales(min_width, max_width):
+        g1 = cv2.GaussianBlur(g, (0, 0), s)
+        g2 = cv2.GaussianBlur(g, (0, 0), s * np.sqrt(2.0))
+        dog = (g2 - g1) * s  # 어두운 선 -> 양수, scale 정규화
+        response = np.maximum(response, dog)
+    pos = np.clip(response, 0, None)
+    if pos.max() <= 0:
+        return response, np.zeros_like(g, dtype=bool)
+    resp_u8 = (pos / pos.max() * 255.0).astype(np.uint8)
+    _, mask_u8 = cv2.threshold(resp_u8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return response, mask_u8.astype(bool)
