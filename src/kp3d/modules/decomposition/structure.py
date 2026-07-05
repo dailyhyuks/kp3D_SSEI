@@ -12,8 +12,8 @@ _MAX_ITERS = 10  # 안전 상한: RGF는 통상 4회 내 수렴 (Zhang et al. 20
 
 def _derive_sigma_color(src: np.ndarray) -> float:
     """P-adapt: sigma_color를 그래디언트 크기 중앙값에서 유도."""
-    gx = cv2.Sobel(src, cv2.CV_32F, 1, 0)
-    gy = cv2.Sobel(src, cv2.CV_32F, 0, 1)
+    gx = cv2.Sobel(src, cv2.CV_32F, 1, 0)  # ksize=3 (OpenCV default Sobel kernel)
+    gy = cv2.Sobel(src, cv2.CV_32F, 0, 1)  # ksize=3 (OpenCV default Sobel kernel)
     mag = np.hypot(gx, gy)
     nonzero = mag[mag > 0]
     if nonzero.size == 0:
@@ -34,6 +34,8 @@ def compute_structure_image(
         입력과 동일 shape의 float32 구조 이미지.
     """
     src = np.asarray(image, dtype=np.float32)
+    if src.ndim not in (2, 3):
+        raise ValueError("image must be 2D (gray) or 3D (color)")
     guide = cv2.GaussianBlur(src, (0, 0), sigma_s)  # RGF step 1: 소구조 완전 제거
     sigma_color = _derive_sigma_color(src)
     for _ in range(_MAX_ITERS):

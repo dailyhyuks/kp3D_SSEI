@@ -1,5 +1,6 @@
 """RGF 구조 이미지 테스트: 미세 텍스처 제거 + 강한 에지 보존."""
 import numpy as np
+import pytest
 
 from kp3d.modules.decomposition.structure import compute_structure_image
 
@@ -30,3 +31,9 @@ def test_rgf_terminates_on_flat_image():
     img = np.full((64, 64), 120.0, dtype=np.float32)
     out = compute_structure_image(img, sigma_s=4.0, noise_sigma=0.5)
     assert np.allclose(out, 120.0, atol=1.0)
+
+
+def test_structure_image_rejects_invalid_ndim():
+    """1D 입력은 ValueError를 발생시켜야 한다."""
+    with pytest.raises(ValueError):
+        compute_structure_image(np.zeros(16, dtype=np.float32), sigma_s=2.0, noise_sigma=1.0)
