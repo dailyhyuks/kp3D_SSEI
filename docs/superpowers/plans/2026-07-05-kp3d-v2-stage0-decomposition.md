@@ -1064,7 +1064,7 @@ import os
 
 import pytest
 
-_REAL_IMAGE = os.path.join("data", "ablation_study", "images", "1_0004.jpg")
+_REAL_IMAGE = os.path.join("data", "ablation_study", "images", "1_0004.png")
 
 
 @pytest.mark.skipif(not os.path.exists(_REAL_IMAGE), reason="실 데이터 없음")
@@ -1082,7 +1082,7 @@ def test_smoke_on_real_painting():
     assert result.skeleton.any()
 ```
 
-주의: 실제 파일 확장자가 `.jpg`가 아니면(`.png` 등) `data/ablation_study/images/`를 확인해 경로를 맞출 것. annotation JSON `1_0004.json`이 존재하므로 대응 이미지가 같은 폴더에 있다.
+참고: `data/ablation_study/images/1_0004.png` 존재 확인 완료 (annotation `1_0004.json`과 쌍).
 
 - [ ] **Step 2: Run test to verify current state**
 
@@ -1157,7 +1157,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run demo and verify visually**
 
-Run: `python scripts/demo_decomposition.py data/ablation_study/images/1_0004.jpg` (실제 확장자에 맞출 것)
+Run: `python scripts/demo_decomposition.py data/ablation_study/images/1_0004.png`
 Expected: 출력 PNG 4장 생성, 잔차 수치 출력. `line_layer.png`에 먹선이, `color_layer.png`에 선 없는 채색이 보이는지 육안 확인. 전체 테스트 재실행:
 
 Run: `python -m pytest tests/test_decomp_statistics.py tests/test_decomp_structure.py tests/test_decomp_lines.py tests/test_decomp_split.py tests/test_decomp_full.py -v`
