@@ -5,6 +5,9 @@
 """
 import cv2
 import numpy as np
+from scipy.ndimage import distance_transform_edt
+from skimage.measure import label as sk_label
+from skimage.morphology import skeletonize
 
 
 def _derive_scales(min_width: float, max_width: float) -> np.ndarray:
@@ -46,3 +49,33 @@ def detect_lines(
     resp_u8 = (pos / pos.max() * 255.0).astype(np.uint8)
     _, mask_u8 = cv2.threshold(resp_u8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return response, mask_u8.astype(bool)
+
+
+_MIN_SKELETON_FRACTION = 0.005  # 정규화 상수: 대각선의 0.5% 미만 성분은 잡음으로 간주
+
+
+def measure_line_widths(line_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """선 마스크에서 스켈레톤과 선폭 지도를 계산.
+
+    선폭 = 스켈레톤 위치의 distance transform × 2 (중심축-경계 거리의 2배).
+    최소 성분 길이는 이미지 대각선 비율로 정규화 (P-adapt).
+
+    Args:
+        line_mask: 2D bool.
+    Returns:
+        (skeleton: bool, width_map: float32 — 스켈레톤 외 0).
+    """
+    mask = np.asarray(line_mask, dtype=bool)
+    skeleton = skeletonize(mask)
+    # 소형 성분 제거: 스켈레톤 픽셀 수를 길이 프록시로 사용
+    diag = float(np.hypot(*mask.shape))
+    min_len = diag * _MIN_SKELETON_FRACTION
+    labels = sk_label(skeleton, connectivity=2)
+    for lbl in range(1, labels.max() + 1):
+        component = labels == lbl
+        if component.sum() < min_len:
+            skeleton[component] = False
+    dist = distance_transform_edt(mask)
+    width_map = np.zeros(mask.shape, dtype=np.float32)
+    width_map[skeleton] = (dist[skeleton] * 2.0).astype(np.float32)
+    return skeleton, width_map

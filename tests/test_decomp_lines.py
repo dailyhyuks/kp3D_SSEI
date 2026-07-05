@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from kp3d.modules.decomposition.lines import detect_lines
+from kp3d.modules.decomposition.lines import detect_lines, measure_line_widths
 
 
 def _dark_line_image(width: int = 3) -> np.ndarray:
@@ -42,3 +42,23 @@ def test_detect_lines_rejects_invalid_input():
         detect_lines(img, 0.0, 4.0)
     with pytest.raises(ValueError):
         detect_lines(img, 5.0, 4.0)
+
+
+def test_width_measurement_on_known_line():
+    """폭 5px 직선의 스켈레톤 폭 측정값이 5±1이어야 한다."""
+    mask = np.zeros((128, 128), dtype=bool)
+    mask[60:65, 10:118] = True
+    skeleton, width_map = measure_line_widths(mask)
+    widths = width_map[skeleton]
+    assert widths.size > 0
+    assert 4.0 <= float(np.median(widths)) <= 6.0
+
+
+def test_small_components_removed():
+    """대각선 0.5% 미만 길이의 점 잡음은 스켈레톤에서 제거되어야 한다."""
+    mask = np.zeros((200, 200), dtype=bool)
+    mask[100, 100] = True          # 1px 잡음
+    mask[50:53, 20:180] = True     # 실제 선
+    skeleton, _ = measure_line_widths(mask)
+    assert not skeleton[100, 100]
+    assert skeleton[51, 60:140].any()
