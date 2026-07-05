@@ -30,6 +30,10 @@ def detect_lines(
         (response, mask): response는 float64 (양수=선), mask는 bool.
     """
     g = np.asarray(structure_gray, dtype=np.float64)
+    if g.ndim != 2:
+        raise ValueError("structure_gray must be a 2D array")
+    if min_width <= 0 or max_width <= 0 or min_width > max_width:
+        raise ValueError("width bounds must satisfy 0 < min_width <= max_width")
     response = np.zeros_like(g)
     for s in _derive_scales(min_width, max_width):
         g1 = cv2.GaussianBlur(g, (0, 0), s)

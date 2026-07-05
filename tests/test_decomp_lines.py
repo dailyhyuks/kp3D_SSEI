@@ -1,5 +1,6 @@
 """Scale-space 선 검출 테스트."""
 import numpy as np
+import pytest
 
 from kp3d.modules.decomposition.lines import detect_lines
 
@@ -30,3 +31,14 @@ def test_detects_both_thin_and_thick_lines():
     _, mask = detect_lines(img, min_width=1.0, max_width=8.0)
     assert float(mask[31, 20:100].mean()) > 0.9
     assert float(mask[83, 20:100].mean()) > 0.9
+
+
+def test_detect_lines_rejects_invalid_input():
+    """비2D 입력과 잘못된 폭 범위는 ValueError를 발생시켜야 한다."""
+    img = np.full((64, 64), 255.0, dtype=np.float32)
+    with pytest.raises(ValueError):
+        detect_lines(np.zeros(16, dtype=np.float32), 1.0, 4.0)
+    with pytest.raises(ValueError):
+        detect_lines(img, 0.0, 4.0)
+    with pytest.raises(ValueError):
+        detect_lines(img, 5.0, 4.0)
