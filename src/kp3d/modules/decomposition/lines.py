@@ -66,15 +66,24 @@ def measure_line_widths(line_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         (skeleton: bool, width_map: float32 — 스켈레톤 외 0).
     """
     mask = np.asarray(line_mask, dtype=bool)
+    if mask.ndim != 2:
+        raise ValueError("line_mask must be a 2D array")
+
     skeleton = skeletonize(mask)
-    # 소형 성분 제거: 스켈레톤 픽셀 수를 길이 프록시로 사용
+
+    # 빈 스켈레톤 조기 반환: distance transform 낭비 제거
+    if not skeleton.any():
+        width_map = np.zeros(mask.shape, dtype=np.float32)
+        return skeleton, width_map
+
+    # 소형 성분 제거 (벡터화): 스켈레톤 픽셀 수를 길이 프록시로 사용
     diag = float(np.hypot(*mask.shape))
     min_len = diag * _MIN_SKELETON_FRACTION
     labels = sk_label(skeleton, connectivity=2)
-    for lbl in range(1, labels.max() + 1):
-        component = labels == lbl
-        if component.sum() < min_len:
-            skeleton[component] = False
+    counts = np.bincount(labels.ravel())
+    keep = counts >= min_len
+    skeleton = keep[labels] & (labels > 0)
+
     dist = distance_transform_edt(mask)
     width_map = np.zeros(mask.shape, dtype=np.float32)
     width_map[skeleton] = (dist[skeleton] * 2.0).astype(np.float32)

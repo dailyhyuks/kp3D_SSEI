@@ -62,3 +62,17 @@ def test_small_components_removed():
     skeleton, _ = measure_line_widths(mask)
     assert not skeleton[100, 100]
     assert skeleton[51, 60:140].any()
+
+
+def test_measure_line_widths_empty_mask():
+    """빈 마스크는 빈 스켈레톤과 0 선폭 맵을 반환해야 한다."""
+    skeleton, width_map = measure_line_widths(np.zeros((100, 100), dtype=bool))
+    assert not skeleton.any()
+    assert width_map.shape == (100, 100)
+    assert float(width_map.max()) == 0.0
+
+
+def test_measure_line_widths_rejects_non_2d():
+    """비2D 입력은 ValueError를 발생시켜야 한다."""
+    with pytest.raises(ValueError):
+        measure_line_widths(np.zeros(16, dtype=bool))
