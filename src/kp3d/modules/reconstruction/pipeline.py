@@ -56,7 +56,7 @@ class ReconstructionPipeline:
 
     def __init__(
         self,
-        model: ReconstructionModel = ReconstructionModel.WONDER3D,
+        model: ReconstructionModel = ReconstructionModel.INSTANTMESH,
         config: Optional[ReconstructionConfig] = None
     ):
         """Initialize reconstruction pipeline.

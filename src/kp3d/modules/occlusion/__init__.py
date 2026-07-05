@@ -53,6 +53,10 @@ from kp3d.modules.occlusion.occlusion_detection import (
     get_layer_priority,
     get_base_layer,
     LAYER_PRIORITY,
+    # Layer order support (paper spec alignment)
+    extract_layer_order_from_shape,
+    layer_order_to_priority,
+    LAYER_ORDER_TO_PRIORITY_BASE,
     # Legacy aliases
     SimpleOcclusionResult,
     SimpleLabelOcclusionDetector,
@@ -150,6 +154,10 @@ __all__ = [
     "get_layer_priority",
     "get_base_layer",
     "LAYER_PRIORITY",
+    # Layer order support (paper spec)
+    "extract_layer_order_from_shape",
+    "layer_order_to_priority",
+    "LAYER_ORDER_TO_PRIORITY_BASE",
     # Legacy aliases
     "SimpleOcclusionResult",
     "SimpleLabelOcclusionDetector",

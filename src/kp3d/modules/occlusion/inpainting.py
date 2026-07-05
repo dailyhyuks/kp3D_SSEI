@@ -979,7 +979,7 @@ def sample_from_boundary_neighborhood(
     image_rgb: np.ndarray,
     occlusion_mask: np.ndarray,
     occludee_visible_mask: np.ndarray,
-    max_distance: int = 10
+    max_distance: int = 15
 ) -> np.ndarray:
     """Sample colors from occludee region near occlusion boundary.
 
@@ -1564,7 +1564,7 @@ def inpaint_occlusion_boundary_guided(
     occludee_full_mask: np.ndarray,
     occludee_visible_mask: np.ndarray,
     edge_darkness: float = 0.3,
-    max_sample_distance: int = 10,
+    max_sample_distance: int = 15,
     # V25: Dynamic Edge Morphology parameters
     use_dynamic_edge: bool = True,
     min_edge_width: int = 1,

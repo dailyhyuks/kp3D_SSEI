@@ -7,7 +7,7 @@ Pipeline Stages:
     Stage 1 - Restoration/De-Weaving: FFT spectral notch + spatial-adaptive NLM blending + contour enhancement
     Stage 2 - Object Segmentation: LabelMe polygon annotation + SAM refinement + per-object RGBA extraction
     Stage 3 - SSEI Inpainting: Style-consistent Self-Exemplar Inpainting using layer_order from annotation
-    Stage 4 - 3D Reconstruction: Wonder3D multi-view reconstruction (default, optional)
+    Stage 4 - 3D Reconstruction: InstantMesh multi-view reconstruction (default, optional)
 
 IMPORTANT: This pipeline intentionally EXCLUDES Real-ESRGAN upscaling, as per the paper specification.
            The weave_removal module handles Stage 1 restoration directly.
@@ -17,7 +17,8 @@ Usage:
 
     config = PaperPipelineConfig(
         weave_removal_preset="v3",
-        inpaint_method="boundary_guided",
+        inpaint_method="patchmatch_guided",
+        use_sam_refinement=True,
         use_reconstruction=False
     )
     pipeline = PaperPipeline(config)
@@ -52,17 +53,17 @@ class PaperPipelineConfig:
 
         # Stage 2-3: Occlusion Pipeline (Segmentation + Inpainting)
         inpaint_method: Inpainting algorithm for occluded regions.
-            - "boundary_guided" (default): V21 boundary-guided inpainting
-            - "patchmatch_guided": V22 PatchMatch texture propagation
+            - "patchmatch_guided" (default): V22 PatchMatch texture propagation
+            - "boundary_guided": V21 boundary-guided inpainting
             - "ns": OpenCV Navier-Stokes
             - "telea": OpenCV Telea
-        use_sam_refinement: Refine LabelMe polygons with SAM.
+        use_sam_refinement: Refine LabelMe polygons with SAM (default: True).
         skip_occlusion_detection: Ablation toggle - skip depth-based occlusion detection.
         skip_inpainting: Ablation toggle - skip inpainting step entirely.
 
         # Stage 4: 3D Reconstruction
         use_reconstruction: Enable 3D reconstruction (default: False).
-        reconstruction_model: Model to use ("wonder3d", "instantmesh", "lgm").
+        reconstruction_model: Model to use ("instantmesh" (default), "wonder3d", "lgm").
 
         # Output settings
         output_dir: Directory for saving outputs.
@@ -74,14 +75,14 @@ class PaperPipelineConfig:
     weave_removal_preset: str = "v3"
 
     # Stage 2-3: Occlusion Pipeline
-    inpaint_method: str = "boundary_guided"
-    use_sam_refinement: bool = False
+    inpaint_method: str = "patchmatch_guided"
+    use_sam_refinement: bool = True
     skip_occlusion_detection: bool = False
     skip_inpainting: bool = False
 
     # Stage 4: Reconstruction
     use_reconstruction: bool = False
-    reconstruction_model: str = "wonder3d"
+    reconstruction_model: str = "instantmesh"
 
     # Output
     output_dir: str = "outputs/paper_pipeline"
@@ -115,9 +116,9 @@ class PaperPipeline:
 
     Stages:
         1. Weave Removal: FFT spectral notch + NLM adaptive + contour enhancement
-        2. Segmentation: LabelMe polygons + optional SAM refinement
+        2. Segmentation: LabelMe polygons + SAM refinement
         3. SSEI Inpainting: Style-consistent inpainting of occluded regions
-        4. 3D Reconstruction: Optional Wonder3D reconstruction
+        4. 3D Reconstruction: Optional InstantMesh reconstruction
 
     The pipeline reuses existing modules rather than reimplementing algorithms:
         - Stage 1: kp3d.modules.weave_removal.WeaveRemovalModule
@@ -225,7 +226,7 @@ class PaperPipeline:
                 "lgm": ReconstructionModel.LGM,
             }
             model = model_map.get(
-                self.config.reconstruction_model, ReconstructionModel.WONDER3D
+                self.config.reconstruction_model, ReconstructionModel.INSTANTMESH
             )
 
             recon_config = ReconstructionConfig(model=model)
@@ -359,7 +360,7 @@ class PaperPipeline:
         # ==================== Stage 4: 3D Reconstruction (Optional) ====================
         meshes: Optional[Dict[str, Any]] = None
         if self.config.use_reconstruction and self.reconstruction is not None:
-            logger.info("  [Stage 4] 3D Reconstruction (Wonder3D)...")
+            logger.info(f"  [Stage 4] 3D Reconstruction ({self.config.reconstruction_model})...")
             stage4_start = time.time()
 
             meshes = self._apply_reconstruction(extracted, sample_dir)
@@ -445,9 +446,9 @@ def run(
     annotation_path: str,
     output_dir: str = "outputs/paper_pipeline",
     weave_removal_preset: str = "v3",
-    inpaint_method: str = "boundary_guided",
+    inpaint_method: str = "patchmatch_guided",
     use_reconstruction: bool = False,
-    reconstruction_model: str = "wonder3d",
+    reconstruction_model: str = "instantmesh",
 ) -> PaperPipelineResult:
     """Convenience function to run the paper-aligned pipeline.
 

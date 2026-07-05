@@ -26,7 +26,7 @@ class ReconstructionConfig:
         device: Compute device ("cuda", "cpu", "mps")
     """
 
-    model: ReconstructionModel = ReconstructionModel.WONDER3D
+    model: ReconstructionModel = ReconstructionModel.INSTANTMESH
     output_format: str = "obj"  # "obj", "glb", "ply"
     resolution: int = 256
     num_views: int = 6

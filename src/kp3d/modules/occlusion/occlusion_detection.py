@@ -1003,11 +1003,14 @@ def predict_inpaint_regions(
 # ============================================================================
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 import re
 
 
 # Layer 우선순위 (숫자가 클수록 앞에 있음 = 다른 것을 가림)
+# NOTE: 이 hard-coded 우선순위는 layer_order 필드가 없을 때 fallback으로 사용됨.
+#       논문 스펙에서 layer_order는 "낮은 값 = 전경(viewer에 가까움)"이지만,
+#       여기서는 "높은 값 = 전경"이므로 변환이 필요함.
 LAYER_PRIORITY = {
     'object_2': 3,   # 가장 앞 (object_2_1, object_2_2, object_2_3 등)
     'object_3': 2,   # 중간
@@ -1015,9 +1018,14 @@ LAYER_PRIORITY = {
     'background': 0, # segmentation용 (occlusion 관계 X)
 }
 
+# layer_order → internal priority 변환을 위한 기준값
+# 논문: 낮은 layer_order = 전경, 코드: 높은 priority = 전경
+# 변환: priority = LAYER_ORDER_TO_PRIORITY_BASE - layer_order
+LAYER_ORDER_TO_PRIORITY_BASE = 1000
+
 
 def get_layer_priority(label: str) -> int:
-    """레이블에서 layer priority 추출.
+    """레이블에서 layer priority 추출 (fallback용, layer_order 없을 때).
 
     Args:
         label: 레이블 문자열 (object_1, object_2_1, object_3, background 등)
@@ -1040,6 +1048,55 @@ def get_layer_priority(label: str) -> int:
             return 1  # object_1
 
     return 0  # 알 수 없는 레이블
+
+
+def extract_layer_order_from_shape(shape: Dict) -> Optional[int]:
+    """LabelMe shape에서 layer_order 값을 추출.
+
+    조회 우선순위:
+    1. shape["layer_order"] (직접 필드)
+    2. shape["flags"]["layer_order"] (flags 내부)
+    3. None (미지정)
+
+    논문 스펙: 낮은 값 = 전경 (viewer에 가까움)
+
+    Args:
+        shape: LabelMe annotation shape dict
+
+    Returns:
+        layer_order 정수값 또는 None (미지정 시)
+    """
+    # 1. 직접 필드 확인
+    if 'layer_order' in shape:
+        val = shape['layer_order']
+        if val is not None and isinstance(val, (int, float)):
+            return int(val)
+
+    # 2. flags 내부 확인
+    flags = shape.get('flags', {})
+    if flags and 'layer_order' in flags:
+        val = flags['layer_order']
+        if val is not None and isinstance(val, (int, float)):
+            return int(val)
+
+    return None
+
+
+def layer_order_to_priority(layer_order: int) -> int:
+    """layer_order를 internal priority로 변환.
+
+    논문: 낮은 layer_order = 전경
+    코드: 높은 priority = 전경
+
+    변환: priority = LAYER_ORDER_TO_PRIORITY_BASE - layer_order
+
+    Args:
+        layer_order: 논문 스펙의 layer_order 값
+
+    Returns:
+        internal priority (높을수록 전경)
+    """
+    return LAYER_ORDER_TO_PRIORITY_BASE - layer_order
 
 
 def get_base_layer(label: str) -> str:
@@ -1126,8 +1183,14 @@ class LayeredOcclusionDetector:
         """
         Annotation shapes에서 occlusion 감지.
 
+        layer_order 필드가 있으면 논문 스펙에 따라 순서 결정:
+        - 낮은 layer_order = 전경 (viewer에 가까움)
+        - 높은 layer_order = 배경
+
+        layer_order가 없으면 기존 hard-coded 라벨 기반 우선순위 사용 (fallback).
+
         Args:
-            shapes: shape dict 리스트 (label, points 포함)
+            shapes: shape dict 리스트 (label, points, [layer_order] 포함)
             image_shape: (height, width)
 
         Returns:
@@ -1135,8 +1198,9 @@ class LayeredOcclusionDetector:
         """
         h, w = image_shape
 
-        # 레이블별 마스크 수집
+        # 레이블별 마스크 수집 + layer_order 추출
         layer_masks: Dict[str, List[np.ndarray]] = {}
+        label_layer_orders: Dict[str, Optional[int]] = {}  # label -> layer_order (논문 스펙)
         background_masks = []
 
         for shape in shapes:
@@ -1153,12 +1217,27 @@ class LayeredOcclusionDetector:
             else:
                 if label not in layer_masks:
                     layer_masks[label] = []
+                    # 첫 등장 시 layer_order 추출
+                    layer_order = extract_layer_order_from_shape(shape)
+                    label_layer_orders[label] = layer_order
                 layer_masks[label].append(mask)
 
         # Background 통합
         combined_bg = np.zeros((h, w), dtype=np.uint8)
         for mask in background_masks:
             combined_bg = np.maximum(combined_bg, mask)
+
+        # 레이블별 priority 계산 (layer_order 우선, 없으면 라벨 기반 fallback)
+        def get_priority_for_label(label: str) -> int:
+            """label에 대한 internal priority 반환."""
+            layer_order = label_layer_orders.get(label)
+            if layer_order is not None:
+                # 논문 스펙: 낮은 layer_order = 전경
+                # 변환: 높은 priority = 전경
+                return layer_order_to_priority(layer_order)
+            else:
+                # Fallback: 기존 라벨 기반 우선순위
+                return get_layer_priority(label)
 
         # Occlusion 관계 계산
         occlusion_relations = []
@@ -1169,8 +1248,8 @@ class LayeredOcclusionDetector:
 
         for i, label_a in enumerate(labels):
             for label_b in labels[i+1:]:
-                priority_a = get_layer_priority(label_a)
-                priority_b = get_layer_priority(label_b)
+                priority_a = get_priority_for_label(label_a)
+                priority_b = get_priority_for_label(label_b)
 
                 # 같은 기본 레이어(예: object_2_1, object_2_2)는 서로 가리지 않음
                 base_a = get_base_layer(label_a)
