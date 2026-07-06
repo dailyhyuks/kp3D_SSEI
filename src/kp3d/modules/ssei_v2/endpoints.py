@@ -10,9 +10,9 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.ndimage import convolve, distance_transform_edt, label
 
-# 접선·곡률 추정 창 = 국소 선폭 × 2 — 선폭은 선 기하가 정의되는 최소 스케일이고
-# 2차량(곡률) 추정에는 그 두 배의 지지 구간이 필요 (정규화 규칙)
-_GEOM_WINDOW_WIDTHS = 2.0
+# 접선·곡률 추정 창 = 국소 선폭 × 8 — 선폭은 선 기하가 정의되는 최소 스케일이고
+# 2차량(곡률) 추정에는 곡률 반지름 스케일의 지지 구간이 필요 (수치 안정성)
+_GEOM_WINDOW_WIDTHS = 8.0
 # 8-근방 구조 원소 — 이산 위상 정의 (수학 유도)
 _N8 = np.ones((3, 3), dtype=np.int64)
 # 2차 최소제곱의 유효 최소 표본 수 3 — 미지수 3개 (수학 유도)
@@ -90,25 +90,68 @@ def _fit_geometry(pts: np.ndarray) -> tuple[np.ndarray, float] | None:
     return np.array([-dy / n, -dx / n]), float(-kappa_in)
 
 
+def _trace_from_break(skeleton: np.ndarray, start: tuple[int, int],
+                      dist_occ: np.ndarray, max_arc: float) -> np.ndarray:
+    """끊김 endpoint에서 가림 반대 방향으로 추적 — 이웃=2 허용."""
+    sk = np.asarray(skeleton, dtype=bool)
+    h, w = sk.shape
+    pts = [np.array(start, dtype=np.int64)]
+    visited = {tuple(start)}
+    arc = 0.0
+    cur = pts[0]
+
+    while True:
+        nbrs = []
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                y_n, x_n = int(cur[0]) + dy, int(cur[1]) + dx
+                if 0 <= y_n < h and 0 <= x_n < w and sk[y_n, x_n] and (y_n, x_n) not in visited:
+                    nbrs.append((y_n, x_n))
+
+        if len(nbrs) == 0:
+            break  # 막다른 끝
+        # 가림에서 가장 먼 이웃 선택 — 획 안쪽 방향 (P-adapt)
+        nxt_pos = max(nbrs, key=lambda p: float(dist_occ[p]))
+        nxt = np.array(nxt_pos, dtype=np.int64)
+        arc += float(np.hypot(*(nxt - cur).astype(np.float64)))
+        if arc > max_arc:
+            break
+        visited.add(tuple(nxt_pos))
+        pts.append(nxt)
+        cur = nxt
+
+    return np.asarray(pts, dtype=np.int64)
+
+
 def detect_break_endpoints(skeleton: np.ndarray, width_map: np.ndarray,
                            line_alpha: np.ndarray,
                            occlusion_mask: np.ndarray) -> list[Endpoint]:
     """가림 경계에 인접한 스켈레톤 끝점을 서술자와 함께 반환."""
     sk = np.asarray(skeleton, dtype=bool)
     occ = np.asarray(occlusion_mask, dtype=bool)
+    h, w = sk.shape
     nb = convolve(sk.astype(np.int64), _N8, mode="constant") - sk.astype(np.int64)
-    ends = np.argwhere(sk & (nb == 1))
-    if ends.size == 0:
+
+    # 끊김 endpoint: 가림 8-이웃을 가지고 이웃 ≤ 2인 픽셀 — 곡선 획의
+    # 대각 래스터화로 인해 끊김 지점이 이웃=2를 가질 수 있다 (기하 유도)
+    occ_neighbors = convolve(occ.astype(np.int64), _N8, mode="constant")
+    has_occ_nbr = occ_neighbors > 0
+    candidates = np.argwhere(sk & has_occ_nbr & (nb <= 2))
+
+    if candidates.size == 0:
         return []
     dist_occ = distance_transform_edt(~occ)
     labels, _ = label(sk, structure=_N8)
     out: list[Endpoint] = []
-    for y, x in ends:
+    for y, x in candidates:
         w_here = max(float(width_map[y, x]), 1.0)  # 스켈레톤 픽셀 폭 하한 1px — 이산 하한 (수학 유도)
         if float(dist_occ[y, x]) > w_here:
             continue  # 가림 경계 인접 조건 — 폭 지도에서 유도 (P-adapt)
-        pts = trace_stroke(sk, (int(y), int(x)),
-                           max_arc=_GEOM_WINDOW_WIDTHS * w_here)
+        # 끊김 점은 이웃≥2를 가질 수 있으므로 방향성 trace 사용
+        pts = _trace_from_break(sk, (int(y), int(x)), dist_occ,
+                                max_arc=_GEOM_WINDOW_WIDTHS * w_here)
         geom = _fit_geometry(pts)
         if geom is None:
             continue

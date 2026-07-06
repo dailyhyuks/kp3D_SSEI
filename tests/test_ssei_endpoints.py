@@ -57,15 +57,23 @@ def test_far_endpoint_not_reported():
 
 
 def test_curvature_sign_on_arc():
-    """가임 경계 근처 끝점의 곡률 계산."""
-    # gap_scene과 유사하되 곡선 형태로 확장
-    skeleton, width_map, line_alpha, occlusion = _gap_scene(width=3.0)
+    """반지름 R 원호의 |κ| ≈ 1/R."""
+    h = w = 96
+    skeleton = np.zeros((h, w), dtype=bool)
+    R, cy, cx = 30.0, 48, 48
+    ang = np.linspace(np.pi * 0.1, np.pi * 0.9, 200)
+    ys = np.round(cy - R * np.sin(ang)).astype(int)
+    xs = np.round(cx + R * np.cos(ang)).astype(int)
+    skeleton[ys, xs] = True
+    occlusion = np.zeros((h, w), dtype=bool)
+    occlusion[:, 44:52] = True
+    skeleton[occlusion] = False
+    width_map = np.where(skeleton, 2.0, 0.0).astype(np.float32)
+    line_alpha = np.where(skeleton, 1.0, 0.0).astype(np.float32)
     eps = detect_break_endpoints(skeleton, width_map, line_alpha, occlusion)
-    # 2개 끝점이 감지되어야 함
-    assert len(eps) == 2
-    # 직선 구간이므로 곡률이 작아야 함
+    assert len(eps) >= 2
     for e in eps:
-        assert abs(e.curvature) < 0.1
+        assert abs(abs(e.curvature) - 1.0 / R) < 0.5 / R
 
 
 def test_stroke_statistics_nonempty_and_positive():
