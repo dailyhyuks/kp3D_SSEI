@@ -97,7 +97,10 @@ def _gauss_reduce(b1: np.ndarray, b2: np.ndarray) -> tuple[np.ndarray, np.ndarra
     if np.linalg.norm(a) > np.linalg.norm(b):
         a, b = b, a
     while True:
-        mu = round(float(np.dot(a, b)) / float(np.dot(a, a)))
+        a_dot_a = float(np.dot(a, a))
+        if a_dot_a <= 1e-12:
+            return a, b
+        mu = round(float(np.dot(a, b)) / a_dot_a)
         b = b - mu * a
         if np.linalg.norm(b) >= np.linalg.norm(a):
             return a, b
@@ -130,8 +133,18 @@ def estimate_lattice(gray: np.ndarray) -> LatticeResult:
     if len(basis) == 2:
         r1, r2 = _gauss_reduce(basis[0], basis[1])
         bmat = np.array([r1, r2], dtype=np.float64)
-        # _collinear 필터가 수직 거리 ≥ 0.5px를 보장하고 Lagrange-Gauss 축소는 행렬식을 보존하므로 |det| ≥ 1 — 역행렬 안전
-        fmat = np.linalg.inv(bmat).T  # 쌍대 격자: F @ B.T = I
+        # Check for degenerate case (collinear basis vectors from 1D signals)
+        det = abs(float(r1[0] * r2[1] - r1[1] * r2[0]))
+        if det > 0.1:
+            # _collinear 필터가 수직 거리 ≥ 0.5px를 보장하고 Lagrange-Gauss 축소는 행렬식을 보존하므로 |det| ≥ 1 — 역행렬 안전
+            fmat = np.linalg.inv(bmat).T  # 쌍대 격자: F @ B.T = I
+        else:
+            # Degenerate case: use only the longer basis vector
+            if np.linalg.norm(r1) >= np.linalg.norm(r2):
+                bmat = np.array([r1], dtype=np.float64)
+            else:
+                bmat = np.array([r2], dtype=np.float64)
+            fmat = (bmat / (float(np.linalg.norm(bmat[0])) ** 2)).reshape(1, 2)
     else:
         bmat = np.array(basis, dtype=np.float64)
         fmat = (bmat / (float(np.linalg.norm(bmat[0])) ** 2)).reshape(1, 2)

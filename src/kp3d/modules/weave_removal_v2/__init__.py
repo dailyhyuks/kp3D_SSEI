@@ -2,6 +2,12 @@
 from .coherence import phase_coherence
 from .lattice import LatticeResult, estimate_lattice, predict_peak_freqs
 from .notch import fit_peak_gaussian, interpolate_notch
+from .removal import (
+    WeaveRemovalV2Result,
+    derive_patch_size,
+    remove_weave,
+    weave_band_energy,
+)
 
 __all__ = [
     "LatticeResult",
@@ -10,4 +16,8 @@ __all__ = [
     "phase_coherence",
     "fit_peak_gaussian",
     "interpolate_notch",
+    "WeaveRemovalV2Result",
+    "derive_patch_size",
+    "weave_band_energy",
+    "remove_weave",
 ]
