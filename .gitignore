@@ -28,6 +28,7 @@
 
 # --- Regenerable outputs / archives ---
 /outputs/
+/output/
 /output_gifs/
 /_archive/
 /archive/
