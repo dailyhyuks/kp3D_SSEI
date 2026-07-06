@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **P-adapt: 튜닝 상수 0.** 허용 3범주 — ① 수학 유도(반 픽셀 0.5, 나이퀴스트 2샘플/px, 상관 길이 1/e, δ_safe=패치 반경 p//2, 이산 하한), ② 안전 상한(`_MAX_ITERS = 10`, 교차 기각 루프 ≤ 후보 쌍 수, 패치 상한 min(H,W)//4), ③ 정규화 규칙(백분위 [5,95]·P75(Wexler 관례), 창=선폭×2, 순위(경험 CDF) 정규화, 배가 확장 ×2). 모든 수치 리터럴 옆에 범주 근거 한국어 주석 필수.
+- **P-adapt: 튜닝 상수 0.** 허용 3범주 — ① 수학 유도(반 픽셀 0.5, 나이퀴스트 2샘플/px, 상관 길이 1/e, δ_safe=패치 반경 p//2, 이산 하한), ② 안전 상한(`_MAX_ITERS = 10`, 교차 기각 루프 ≤ 후보 쌍 수, 패치 상한 min(H,W)//4), ③ 정규화 규칙(백분위 [5,95]·P75(Wexler 관례), 창=선폭×2 시작·곡률 분해능(|κ̂|·L²/8 ≥ 반 픽셀) 미달 시 ×2 배가 확장, 순위(경험 CDF) 정규화, 배가 확장 ×2). 모든 수치 리터럴 옆에 범주 근거 한국어 주석 필수.
 - **스펙 명시 승계 상수:** d_max 초기값은 v1 해상도 적응 규칙(15/25/40)을 유지한다 (스펙 §3.5 명시) — 주석에 "스펙 §3.5 승계" 표기.
 - **주석·도크스트링 전부 한국어** (식별자는 영어).
 - **기하 관례(모듈 공통):** 좌표 (y, x). 접선 t=(dy, dx) 단위 벡터, θ=atan2(dy, dx). 좌법선 N=(t_x, −t_y). r''(s)=κ·N. 진행 방향 반전 시 κ 부호 반전. Endpoint.tangent는 획 바깥(끊김 안쪽) 방향.
@@ -158,9 +158,10 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.ndimage import convolve, distance_transform_edt, label
 
-# 접선·곡률 추정 창 = 국소 선폭 × 2 — 선폭은 선 기하가 정의되는 최소 스케일이고
-# 2차량(곡률) 추정에는 그 두 배의 지지 구간이 필요 (정규화 규칙)
+# 접선·곡률 추정 창 시작값 = 국소 선폭 × 2 — 곡률 분해능 미달이면 ×2 배가 확장 (정규화 규칙)
 _GEOM_WINDOW_WIDTHS = 2.0
+# 이산 격자 위치 불확실성 반 픽셀 — 곡률 분해능 한계 |κ̂|·L²/8 ≥ 0.5 판정에 사용 (수학 유도)
+_HALF_PIXEL = 0.5
 # 8-근방 구조 원소 — 이산 위상 정의 (수학 유도)
 _N8 = np.ones((3, 3), dtype=np.int64)
 # 2차 최소제곱의 유효 최소 표본 수 3 — 미지수 3개 (수학 유도)
@@ -201,8 +202,13 @@ def trace_stroke(skeleton: np.ndarray, start: tuple[int, int],
                 y, x = int(cur[0]) + dy, int(cur[1]) + dx
                 if 0 <= y < h and 0 <= x < w and sk[y, x] and (y, x) not in visited:
                     nbrs.append((y, x))
+        if len(nbrs) == 2 and (abs(nbrs[0][0] - nbrs[1][0]) <= 1
+                               and abs(nbrs[0][1] - nbrs[1][1]) <= 1):
+            # 계단 래스터: 두 이웃이 서로 8-인접 — L1 가까운 이웃 먼저 (수학 유도)
+            nbrs.sort(key=lambda q: abs(q[0] - int(cur[0])) + abs(q[1] - int(cur[1])))
+            nbrs = nbrs[:1]
         if len(nbrs) != 1:
-            break  # 끝 또는 분기 — 이후 순서 정의 불가
+            break  # 끝 또는 진짜 분기 — 이후 순서 정의 불가
         nxt = np.array(nbrs[0], dtype=np.int64)
         arc += float(np.hypot(*(nxt - cur).astype(np.float64)))
         if max_arc is not None and arc > max_arc:
@@ -245,8 +251,17 @@ def detect_break_endpoints(skeleton: np.ndarray, width_map: np.ndarray,
     sk = np.asarray(skeleton, dtype=bool)
     occ = np.asarray(occlusion_mask, dtype=bool)
     nb = convolve(sk.astype(np.int64), _N8, mode="constant") - sk.astype(np.int64)
-    ends = np.argwhere(sk & (nb == 1))
-    if ends.size == 0:
+    ends = [tuple(int(v) for v in p) for p in np.argwhere(sk & (nb == 1))]
+    # nb==2이지만 두 이웃이 서로 8-인접하면 위상적 '팁' (대각 래스터 절단부) — 수학 유도
+    h_, w_ = sk.shape
+    for y, x in np.argwhere(sk & (nb == 2)):
+        ns = [(y + dy, x + dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+              if not (dy == 0 and dx == 0)
+              and 0 <= y + dy < h_ and 0 <= x + dx < w_ and sk[y + dy, x + dx]]
+        (ay, ax), (by, bx) = ns
+        if abs(int(ay) - int(by)) <= 1 and abs(int(ax) - int(bx)) <= 1:
+            ends.append((int(y), int(x)))
+    if not ends:
         return []
     dist_occ = distance_transform_edt(~occ)
     labels, _ = label(sk, structure=_N8)
@@ -255,9 +270,22 @@ def detect_break_endpoints(skeleton: np.ndarray, width_map: np.ndarray,
         w_here = max(float(width_map[y, x]), 1.0)  # 스켈레톤 픽셀 폭 하한 1px — 이산 하한 (수학 유도)
         if float(dist_occ[y, x]) > w_here:
             continue  # 가림 경계 인접 조건 — 폭 지도에서 유도 (P-adapt)
-        pts = trace_stroke(sk, (int(y), int(x)),
-                           max_arc=_GEOM_WINDOW_WIDTHS * w_here)
-        geom = _fit_geometry(pts)
+        # 창 = 선폭×2 시작, 곡률이 분해능 한계 미만이면 ×2 배가 확장 (정규화 규칙)
+        arc = _GEOM_WINDOW_WIDTHS * w_here
+        geom = None
+        prev = 0
+        while True:
+            pts = trace_stroke(sk, (int(y), int(x)), max_arc=arc)
+            geom = _fit_geometry(pts)
+            if geom is None or len(pts) == prev:
+                break  # 기하 실패 또는 획 소진
+            seg = np.diff(pts.astype(np.float64), axis=0)
+            length = float(np.hypot(seg[:, 0], seg[:, 1]).sum())
+            # 분해능: 창 호장 L에서 측정 가능한 최소 |κ| = 8·반픽셀/L² (수학 유도)
+            if abs(geom[1]) * length * length / 8.0 >= _HALF_PIXEL:
+                break
+            prev = len(pts)
+            arc *= 2.0  # 배가 확장 (정규화 규칙)
         if geom is None:
             continue
         tangent, kappa = geom
