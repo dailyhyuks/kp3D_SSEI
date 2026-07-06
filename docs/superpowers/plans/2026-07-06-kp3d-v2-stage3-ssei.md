@@ -748,7 +748,7 @@ def _chord_crosses_occlusion(p0: np.ndarray, p1: np.ndarray,
                              occ: np.ndarray) -> bool:
     """두 endpoint 현(직선)이 가림 영역을 통과하는지 — 구조 제약."""
     d = float(np.linalg.norm(p1 - p0))
-    n = max(int(np.ceil(d * _SAMPLES_PER_PX)) + 1, 2)
+    n = max(int(np.ceil(d * _SAMPLES_PER_PX)) + 1, 2)  # 선분 양 끝 최소 2점 — 이산 하한 (수학 유도)
     ys = np.round(np.linspace(p0[0], p1[0], n)).astype(int)
     xs = np.round(np.linspace(p0[1], p1[1], n)).astype(int)
     h, w = occ.shape
@@ -784,7 +784,7 @@ def _trace_pixels(curve: ConnectionCurve) -> set[tuple[int, int]]:
 
 def _endpoint_disk(e: Endpoint) -> set[tuple[int, int]]:
     """endpoint 주변 반경 = 국소 선폭 디스크 — 자기 획 근방 제외 창 (폭에서 유도)."""
-    r = int(np.ceil(max(e.width, 1.0)))
+    r = int(np.ceil(max(e.width, 1.0)))  # 폭 하한 1px — 이산 하한 (수학 유도)
     y0, x0 = int(round(e.pos[0])), int(round(e.pos[1]))
     return {(y0 + dy, x0 + dx)
             for dy in range(-r, r + 1) for dx in range(-r, r + 1)
@@ -843,12 +843,13 @@ def match_endpoints(endpoints: list[Endpoint], skeleton: np.ndarray,
         return MatchResult([], list(range(E)))
     keys = list(curves)
     bend = np.array([curves[k].bending_energy
-                     / max(curves[k].arc_length, 1.0) for k in keys])
+                     / max(curves[k].arc_length, 1.0)  # 호장 하한 1px — 이산 하한 (수학 유도)
+                     for k in keys])
     dwv = np.array([abs(endpoints[i].width - endpoints[j].width)
                     / (endpoints[i].width + endpoints[j].width)
                     for i, j in keys])
     div = np.array([abs(endpoints[i].ink - endpoints[j].ink)
-                    / max(endpoints[i].ink + endpoints[j].ink, 1.0)
+                    / max(endpoints[i].ink + endpoints[j].ink, 1.0)  # 분모 하한 1 = 알파(0~1) 스케일 — 이산 하한 (수학 유도)
                     for i, j in keys])
     cost = {k: (_rank_less(bend, float(bend[m])) + _rank_less(dwv, float(dwv[m]))
                 + _rank_less(div, float(div[m]))) / 3.0
