@@ -1202,8 +1202,10 @@ def build_piece_pools(color_layer: np.ndarray, occlusion_mask: np.ndarray,
         prev_grown = None
         while True:
             # 선 장벽을 넘지 않는 반복 팽창 (체비쇼프 거리 dmax)
-            grown = binary_dilation(piece, structure=_N8, iterations=dmax,
-                                    mask=~lines | piece)
+            # 씨앗에서 선 픽셀 제외 — 선이 덮은 귀속 픽셀이 다리가 되어
+            # 장벽 반대편으로 새는 것을 막는다 (이산 위상)
+            grown = binary_dilation(piece & ~lines, structure=_N8,
+                                    iterations=dmax, mask=~lines)
             pool = grown & visible & safe
             if int(pool.sum()) >= int(piece.sum()) or dmax >= diag:
                 break
