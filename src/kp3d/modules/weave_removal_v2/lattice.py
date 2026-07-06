@@ -74,16 +74,13 @@ def _reduce_to_fundamental(vec: np.ndarray, shifted: np.ndarray,
                            cy: int, cx: int) -> np.ndarray:
     """정수 약수 위치가 국소 최대이면 기본 주기로 축약 (고조파 제거, 상수 없음)."""
     best = vec
-    k = 2
-    while True:
+    norm = float(np.linalg.norm(vec))
+    for k in range(2, int(np.floor(norm / _MIN_PERIOD)) + 1):
         cand = vec / k
-        if float(np.linalg.norm(cand)) < _MIN_PERIOD:
-            break
         rounded = np.round(cand)
         if (float(np.linalg.norm(cand - rounded)) <= _HALF_PIXEL
                 and _is_local_max(shifted, cy, cx, rounded)):
             best = rounded.astype(np.float64)
-        k += 1
     return best
 
 
@@ -133,6 +130,7 @@ def estimate_lattice(gray: np.ndarray) -> LatticeResult:
     if len(basis) == 2:
         r1, r2 = _gauss_reduce(basis[0], basis[1])
         bmat = np.array([r1, r2], dtype=np.float64)
+        # _collinear 필터가 수직 거리 ≥ 0.5px를 보장하고 Lagrange-Gauss 축소는 행렬식을 보존하므로 |det| ≥ 1 — 역행렬 안전
         fmat = np.linalg.inv(bmat).T  # 쌍대 격자: F @ B.T = I
     else:
         bmat = np.array(basis, dtype=np.float64)
