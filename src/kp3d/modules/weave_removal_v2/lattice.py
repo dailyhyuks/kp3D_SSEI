@@ -41,7 +41,7 @@ def _autocorrelation(gray: np.ndarray) -> np.ndarray:
 
 
 def _halfplane_peaks(shifted: np.ndarray, cy: int, cx: int) -> list[tuple[float, np.ndarray]]:
-    """상반평면(dy>0 또는 dy==0,dx>0)의 양수 국소 최대 [(높이, (dy,dx)), ...] 높이 내림차순."""
+    """상반평면(dy>0 또는 dy==0,dx>0)의 양수 국소 최대 [(높이, (dy,dx)), ...] 높이 내림차순, 동률은 L1놈 오름차순."""
     h, w = shifted.shape
     local_max = shifted == maximum_filter(shifted, size=3, mode="wrap")
     peaks: list[tuple[float, np.ndarray]] = []
@@ -58,7 +58,8 @@ def _halfplane_peaks(shifted: np.ndarray, cy: int, cx: int) -> list[tuple[float,
         if val <= 0.0:
             continue
         peaks.append((val, np.array([dy, dx], dtype=np.float64)))
-    peaks.sort(key=lambda p: -p[0])
+    # 높이 내림차순, 동률은 |dy|+|dx| 오름차순 (축 정렬 우선)
+    peaks.sort(key=lambda p: (-p[0], abs(p[1][0]) + abs(p[1][1])))
     return peaks
 
 
@@ -91,16 +92,32 @@ def _collinear(v: np.ndarray, b: np.ndarray) -> bool:
     return perp <= _HALF_PIXEL
 
 
+def _is_alias_direction(vec: np.ndarray, shifted: np.ndarray,
+                        cy: int, cx: int) -> bool:
+    """표본화 한계 미만 lag에서 이미 완전 상관인 방향(상수/에일리어스 방향)인지.
+
+    k = floor(|v|/최소주기)+1 로 나눈 반 이하 lag가 피크 높이와 같으면
+    실제 기본 주기가 2px 미만 ⇒ 그 방향은 주기 구조가 아니라 릿지.
+    허용오차는 FFT 반올림 오차 상한 eps·size (수학 유도 상수).
+    """
+    norm = float(np.linalg.norm(vec))
+    k = int(np.floor(norm / _MIN_PERIOD)) + 1
+    sub = np.round(vec / k)
+    y, x = cy + int(sub[0]), cx + int(sub[1])
+    if not (0 <= y < shifted.shape[0] and 0 <= x < shifted.shape[1]):
+        return False
+    tol = float(np.finfo(np.float64).eps) * shifted.size
+    vy, vx = cy + int(round(vec[0])), cx + int(round(vec[1]))
+    return float(shifted[y, x]) >= float(shifted[vy, vx]) - tol
+
+
 def _gauss_reduce(b1: np.ndarray, b2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Lagrange-Gauss 2D 격자 축소 — 최단 기저쌍으로 정규화 (순수 수학, 상수 없음)."""
     a, b = b1.copy(), b2.copy()
     if np.linalg.norm(a) > np.linalg.norm(b):
         a, b = b, a
     while True:
-        a_dot_a = float(np.dot(a, a))
-        if a_dot_a <= 1e-12:
-            return a, b
-        mu = round(float(np.dot(a, b)) / a_dot_a)
+        mu = round(float(np.dot(a, b)) / float(np.dot(a, a)))
         b = b - mu * a
         if np.linalg.norm(b) >= np.linalg.norm(a):
             return a, b
@@ -122,29 +139,37 @@ def estimate_lattice(gray: np.ndarray) -> LatticeResult:
     peaks = _halfplane_peaks(shifted, cy, cx)
     if not peaks:
         return empty
-    b1 = _reduce_to_fundamental(peaks[0][1], shifted, cy, cx)
-    strengths = [peaks[0][0]]
+    # b1: 첫 비에일리어스 피크 선택
+    b1 = None
+    strength1 = 0.0
+    for val, vec in peaks:
+        if not _is_alias_direction(vec, shifted, cy, cx):
+            b1 = _reduce_to_fundamental(vec, shifted, cy, cx)
+            strength1 = val
+            break
+    if b1 is None:
+        return empty
+    strengths = [strength1]
     basis = [b1]
-    for val, vec in peaks[1:]:
-        if not _collinear(vec, b1):
+    # b2: b1과 비공선, 비에일리어스 피크 선택
+    for val, vec in peaks:
+        if not _collinear(vec, b1) and not _is_alias_direction(vec, shifted, cy, cx):
             basis.append(_reduce_to_fundamental(vec, shifted, cy, cx))
             strengths.append(val)
             break
     if len(basis) == 2:
         r1, r2 = _gauss_reduce(basis[0], basis[1])
-        bmat = np.array([r1, r2], dtype=np.float64)
-        # Check for degenerate case (collinear basis vectors from 1D signals)
-        det = abs(float(r1[0] * r2[1] - r1[1] * r2[0]))
-        if det > 0.1:
+        # Gauss 축소 후 에일리어스 방향이 생성되었는지 검사 (거의 공선 기저의 차분이 릿지를 만드는 경우)
+        if _is_alias_direction(r1, shifted, cy, cx) or _is_alias_direction(r2, shifted, cy, cx):
+            # 축소 결과가 릿지 방향이면 더 축 정렬된(L1놈 작은) 원본 기저 하나만 사용
+            l1_0 = abs(basis[0][0]) + abs(basis[0][1])
+            l1_1 = abs(basis[1][0]) + abs(basis[1][1])
+            bmat = np.array([basis[0] if l1_0 <= l1_1 else basis[1]], dtype=np.float64)
+            fmat = (bmat / (float(np.linalg.norm(bmat[0])) ** 2)).reshape(1, 2)
+        else:
+            bmat = np.array([r1, r2], dtype=np.float64)
             # _collinear 필터가 수직 거리 ≥ 0.5px를 보장하고 Lagrange-Gauss 축소는 행렬식을 보존하므로 |det| ≥ 1 — 역행렬 안전
             fmat = np.linalg.inv(bmat).T  # 쌍대 격자: F @ B.T = I
-        else:
-            # Degenerate case: use only the longer basis vector
-            if np.linalg.norm(r1) >= np.linalg.norm(r2):
-                bmat = np.array([r1], dtype=np.float64)
-            else:
-                bmat = np.array([r2], dtype=np.float64)
-            fmat = (bmat / (float(np.linalg.norm(bmat[0])) ** 2)).reshape(1, 2)
     else:
         bmat = np.array(basis, dtype=np.float64)
         fmat = (bmat / (float(np.linalg.norm(bmat[0])) ** 2)).reshape(1, 2)
