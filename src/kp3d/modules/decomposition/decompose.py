@@ -7,6 +7,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# 8비트 양자화 노이즈 바닥 (Δ=1, σ=Δ/√12) — 수학 유도 상수
+_QUANT_NOISE_FLOOR = 1.0 / np.sqrt(12.0)
+
 from kp3d.modules.decomposition.lines import detect_lines, measure_line_widths
 from kp3d.modules.decomposition.split import recompose, split_layers
 from kp3d.modules.decomposition.statistics import (
@@ -50,9 +53,10 @@ def decompose(image_bgr: np.ndarray) -> DecompositionResult:
     noise_sigma = estimate_noise_sigma(gray)
     weave = estimate_weave_period(gray)
     periods = [p for p in (weave.period_x, weave.period_y) if np.isfinite(p)]
-    sigma_s = max(periods) if periods else 3.0  # 주기 미검출 시 최소 평활 스케일
+    diag = float(np.hypot(*gray.shape))
+    sigma_s = max(periods) if periods else max(1.0, 0.005 * diag)  # 직조 미검출 시: 대각선 0.5% (정규화 상수), 최소 1px
     structure = compute_structure_image(
-        gray.astype(np.float32), sigma_s=sigma_s, noise_sigma=max(noise_sigma, 0.1)
+        gray.astype(np.float32), sigma_s=sigma_s, noise_sigma=max(noise_sigma, _QUANT_NOISE_FLOOR)
     )
 
     # 1차 패스: 광역 범위로 선 후보 추출 -> 선폭 분포 측정

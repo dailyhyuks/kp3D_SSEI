@@ -20,6 +20,8 @@ def estimate_noise_sigma(gray: np.ndarray) -> float:
         추정 노이즈 표준편차 (밝기 단위).
     """
     g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2:
+        raise ValueError("gray must be a 2D array")
     kernel = np.array([[1, -2, 1], [-2, 4, -2], [1, -2, 1]], dtype=np.float64)
     h, w = g.shape
     conv = convolve2d(g, kernel, mode="valid")

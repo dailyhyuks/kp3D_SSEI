@@ -71,3 +71,12 @@ def test_smoke_on_real_painting():
     assert np.array_equal(rec[zero], img[zero])
     # 선이 하나라도 검출되어야 한다 (구륵법 그림 전제)
     assert result.skeleton.any()
+
+
+def test_decompose_on_uniform_image():
+    """선이 없는 균일 이미지에서도 예외 없이 완주하고 불변식을 지켜야 한다."""
+    img = np.full((128, 128, 3), 200, dtype=np.uint8)
+    result = decompose(img)
+    rec = recompose_result(img, result)
+    zero = result.line_alpha == 0.0
+    assert np.array_equal(rec[zero], result.color_layer[zero])

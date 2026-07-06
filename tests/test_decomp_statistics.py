@@ -1,5 +1,6 @@
 """Stage 0 분해 모듈 - 통계 측정 테스트."""
 import numpy as np
+import pytest
 
 from kp3d.modules.decomposition.statistics import estimate_noise_sigma, estimate_weave_period
 
@@ -51,3 +52,9 @@ def test_weave_period_on_flat_image():
     assert np.isnan(result.period_y)
     assert result.strength_x == 0.0
     assert result.strength_y == 0.0
+
+
+def test_noise_sigma_rejects_non_2d():
+    """비2D 입력은 ValueError를 발생시켜야 한다."""
+    with pytest.raises(ValueError):
+        estimate_noise_sigma(np.zeros(16, dtype=np.float64))
