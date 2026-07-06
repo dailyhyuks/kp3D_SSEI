@@ -1,5 +1,6 @@
 """Stage 1 v2: 색 레이어 직물 제거 + 자가 경쟁 게이트 (스펙 §1.4, §2)."""
 from .coherence import phase_coherence
+from .gate import GateResult, self_competition_gate
 from .lattice import LatticeResult, estimate_lattice, predict_peak_freqs
 from .line_layer import normalize_line_contrast
 from .notch import fit_peak_gaussian, interpolate_notch
@@ -25,4 +26,6 @@ __all__ = [
     "remove_weave",
     "RestorationResult",
     "restore",
+    "GateResult",
+    "self_competition_gate",
 ]
