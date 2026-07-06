@@ -96,8 +96,10 @@ def _is_alias_direction(vec: np.ndarray, shifted: np.ndarray,
                         cy: int, cx: int) -> bool:
     """표본화 한계 미만 lag에서 이미 완전 상관인 방향(상수/에일리어스 방향)인지.
 
-    k = floor(|v|/최소주기)+1 로 나눈 반 이하 lag가 피크 높이와 같으면
-    실제 기본 주기가 2px 미만 ⇒ 그 방향은 주기 구조가 아니라 릿지.
+    k = floor(|v|/최소주기)+1 로 나눈 부분 lag 상관이 피크 높이와
+    FFT 반올림 오차 한도 내에서 같으면(릿지) 에일리어스로 기각.
+    단측 부등호는 비주기 광역 상관(블롭/선)이 소 lag 상관을 키우는 경우
+    진짜 기저를 오기각하므로 등식 판정을 사용.
     허용오차는 FFT 반올림 오차 상한 eps·size (수학 유도 상수).
     """
     norm = float(np.linalg.norm(vec))
@@ -108,7 +110,7 @@ def _is_alias_direction(vec: np.ndarray, shifted: np.ndarray,
         return False
     tol = float(np.finfo(np.float64).eps) * shifted.size
     vy, vx = cy + int(round(vec[0])), cx + int(round(vec[1]))
-    return float(shifted[y, x]) >= float(shifted[vy, vx]) - tol
+    return abs(float(shifted[y, x]) - float(shifted[vy, vx])) <= tol
 
 
 def _gauss_reduce(b1: np.ndarray, b2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

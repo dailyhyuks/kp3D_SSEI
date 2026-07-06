@@ -16,17 +16,17 @@ from kp3d.modules.weave_removal_v2 import (
 _REAL_IMAGE = Path("data/ablation_study/images/1_0004.png")
 
 
-def _weave_painting_with_lines(h: int = 256, w: int = 256) -> np.ndarray:
-    """256x256: 직조 주기 8/12px로 충분한 격자 기저 추정."""
+def _weave_painting_with_lines(h: int = 128, w: int = 128) -> np.ndarray:
+    """128x128 고정: 프록시 배율 0.5에서 직조 주기 8/12px가 4/6px로 보존됨."""
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
-    base = 100.0 + 60.0 * np.exp(
+    base = 110.0 + 50.0 * np.exp(
         -((yy - h / 2) ** 2 + (xx - w / 2) ** 2) / (2 * (h / 4) ** 2)
     )
     weave = 12.0 * np.cos(2 * np.pi * yy / 8.0) + 12.0 * np.cos(2 * np.pi * xx / 12.0)
     gray = np.clip(base + weave, 0, 255).astype(np.uint8)
     img = np.stack([gray, gray, gray], axis=-1)
-    cv2.line(img, (32, 32), (224, 32), (20, 20, 20), 3)
-    cv2.circle(img, (128, 128), 60, (30, 30, 30), 3)
+    cv2.line(img, (16, 16), (112, 16), (20, 20, 20), 3)
+    cv2.circle(img, (64, 64), 30, (30, 30, 30), 3)
     return img
 
 
@@ -39,12 +39,10 @@ def test_gate_end_to_end_on_synthetic_weave():
     assert result.noise_sigma >= 0.0
     gray0 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
     lattice = estimate_lattice(gray0)
-    # 격자 기저가 검출되면 직조 에너지가 감소해야 함
-    if lattice.basis.shape[0] > 0:
-        e0 = weave_band_energy(gray0, lattice)
-        gray1 = cv2.cvtColor(result.restored, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        e1 = weave_band_energy(gray1, lattice)
-        assert e1 < e0  # 어느 경로가 이기든 직조 에너지는 감소해야 함
+    e0 = weave_band_energy(gray0, lattice)
+    gray1 = cv2.cvtColor(result.restored, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    e1 = weave_band_energy(gray1, lattice)
+    assert e1 < e0  # 어느 경로가 이기든 직조 에너지는 감소해야 함
 
 
 @pytest.mark.skipif(not _REAL_IMAGE.exists(), reason="실이미지 데이터 없음")
