@@ -1,5 +1,8 @@
 """decompose() 전체 오케스트레이션 테스트."""
+import os
+
 import numpy as np
+import pytest
 
 from kp3d.modules.decomposition.decompose import (
     DecompositionResult,
@@ -50,3 +53,21 @@ def test_invariant_recompose_exact_outside_lines():
     rec = recompose_result(img, result)
     zero = result.line_alpha == 0.0
     assert np.array_equal(rec[zero], img[zero])
+
+
+_REAL_IMAGE = os.path.join("data", "ablation_study", "images", "1_0004.png")
+
+
+@pytest.mark.skipif(not os.path.exists(_REAL_IMAGE), reason="실 데이터 없음")
+def test_smoke_on_real_painting():
+    """실제 한국화에서 예외 없이 완주하고 불변식을 지켜야 한다."""
+    import cv2
+
+    img = cv2.imread(_REAL_IMAGE)
+    assert img is not None
+    result = decompose(img)
+    rec = recompose_result(img, result)
+    zero = result.line_alpha == 0.0
+    assert np.array_equal(rec[zero], img[zero])
+    # 선이 하나라도 검출되어야 한다 (구륵법 그림 전제)
+    assert result.skeleton.any()
