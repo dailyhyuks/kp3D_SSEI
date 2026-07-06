@@ -9,6 +9,7 @@ from .removal import (
     remove_weave,
     weave_band_energy,
 )
+from .restore import RestorationResult, restore
 
 __all__ = [
     "LatticeResult",
@@ -22,4 +23,6 @@ __all__ = [
     "derive_patch_size",
     "weave_band_energy",
     "remove_weave",
+    "RestorationResult",
+    "restore",
 ]
