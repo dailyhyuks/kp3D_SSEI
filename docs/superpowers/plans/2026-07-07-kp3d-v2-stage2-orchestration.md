@@ -494,7 +494,19 @@ git commit -m "feat(orchestration): per-object amodal completion via SSEI 2.0"
 - [ ] **Step 1: 실패 테스트 작성**
 
 ```python
-"""오케스트레이션 통합 — 2객체 합성 장면: 그래프 방향, 아모달 완성 정량(프로토콜 B 동형)."""
+"""오케스트레이션 통합 — 2객체 합성 장면: 그래프 방향, 아모달 완성 정량(프로토콜 B 동형).
+
+fixture 는 decompose 의 도메인(얇은 어두운 먹 획 + 등휘도 채색 wash + 미세 직조)을
+따라야 한다. 수치 검증으로 확정된 제약 3가지:
+① 직조(주기 4px) + 약한 노이즈 필수 — 없으면 weave 주기가 구조 크기(60px)로
+   오검출되어 RGF sigma_s 가 커지고 3px 먹선이 blob 으로 뭉개진다.
+② wash 들은 grayscale 등휘도(채널 평균 동일)여야 한다 — 아니면 wash 경계가
+   선으로 분류된다.
+③ 가려지는 먹 획의 가시 stub 은 국소 선폭(smear 후 ~20px)보다 길어야 한다 —
+   짧으면 stub 양끝이 모두 endpoint 로 검출돼(E=4) 매칭이 퇴화 동률로 전원
+   종결된다. 또한 획에 모서리가 닿으면 medial-axis 대각 가지가 끝점 접선을
+   오염시키므로 모서리 없는 일자 획을 쓴다.
+"""
 import numpy as np
 import pytest
 
@@ -505,24 +517,31 @@ from kp3d.modules.decomposition import decompose
 from kp3d.modules.orchestration import orchestrate
 
 
-def _scene(h=160, w=160, with_disk=True):
-    """배경 210 + 후방 사각형(채색 + 3px 윤곽) + 전경 원판(가림 물체)."""
-    img = np.full((h, w, 3), 210, dtype=np.uint8)
-    cv2.rectangle(img, (30, 60), (130, 120), (90, 150, 200), -1)
-    cv2.rectangle(img, (30, 60), (130, 120), (30, 30, 30), 3)
+def _scene(h=160, w=160, with_disk=True, seed=0):
+    """등휘도 wash 배경/사각 + 수평 먹 획(y=90) + 전경 원판(먹 윤곽) + 직조/노이즈."""
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    img[:, :] = (60, 170, 60)                                    # 배경 wash
+    cv2.rectangle(img, (10, 60), (150, 120), (60, 60, 170), -1)  # 후방 사각 wash
+    cv2.line(img, (15, 90), (145, 90), (20, 20, 20), 3)          # 사각 내부 수평 먹 획
     if with_disk:
-        cv2.circle(img, (80, 60), 24, (140, 60, 40), -1)
-    return img
+        cv2.circle(img, (80, 90), 24, (170, 60, 60), -1)         # 전경 원판 wash
+        cv2.circle(img, (80, 90), 24, (20, 20, 20), 3)           # 원판 먹 윤곽
+    out = img.astype(np.float64)
+    yy, xx = np.mgrid[0:h, 0:w]
+    weave = 6.0 * (np.sin(2 * np.pi * xx / 4.0) + np.sin(2 * np.pi * yy / 4.0))
+    noise = np.random.default_rng(seed).normal(0.0, 2.0, (h, w))
+    out += (weave + noise)[..., None]
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 
 def _shapes():
     ang = np.linspace(0.0, 2.0 * np.pi, 16, endpoint=False)
-    circle = [[80.0 + 27.0 * np.cos(a), 60.0 + 27.0 * np.sin(a)] for a in ang]
+    circle = [[80.0 + 27.0 * np.cos(a), 90.0 + 27.0 * np.sin(a)] for a in ang]
     return [
         {"label": "object_2_1", "points": circle,
          "shape_type": "polygon", "layer_order": 1},
         {"label": "object_1",
-         "points": [[30, 60], [130, 60], [130, 120], [30, 120]],
+         "points": [[10, 60], [150, 60], [150, 120], [10, 120]],
          "shape_type": "polygon", "layer_order": 2},
     ]
 
@@ -555,9 +574,9 @@ def test_orchestrate_graph_direction_and_amodal_quality():
     base = gt.copy(); base[occ] = mean_col
     assert _psnr(comp.result.inpainted[occ], gt[occ]) > _psnr(base[occ], gt[occ])
 
-    # ② 스켈레톤 재현율(1px 팽창 허용): 사각 윗변 먹선 자취 회복
+    # ② 스켈레톤 재현율(1px 팽창 허용): 수평 먹 획 자취 회복
     gt_sk = decompose(gt).skeleton & occ
-    assert np.any(gt_sk)  # 윗변이 원판에 가려져 있어야 실험이 성립
+    assert np.any(gt_sk)  # 획 중앙이 원판에 가려져 있어야 실험이 성립
     cover = binary_dilation(comp.result.line.skeleton, iterations=1)
     recall = (float(np.count_nonzero(gt_sk & cover))
               / float(np.count_nonzero(gt_sk)))
