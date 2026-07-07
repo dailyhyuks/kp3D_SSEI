@@ -3,10 +3,12 @@ from .annotations import ObjectAnnotation, load_annotations, resolve_visibility
 from .complete import ObjectCompletion, complete_object
 from .graph import OcclusionEdge, build_occlusion_graph, derive_dilation_radius
 from .orchestrate import OrchestrationResult, orchestrate
+from .refine import refine_annotations
 
 __all__ = [
     "ObjectAnnotation", "load_annotations", "resolve_visibility",
     "OcclusionEdge", "build_occlusion_graph", "derive_dilation_radius",
     "ObjectCompletion", "complete_object",
     "OrchestrationResult", "orchestrate",
+    "refine_annotations",
 ]

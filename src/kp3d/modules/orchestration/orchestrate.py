@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 
 from kp3d.modules.decomposition import decompose
@@ -14,6 +15,7 @@ from kp3d.modules.weave_removal_v2.gate import self_competition_gate
 from .annotations import ObjectAnnotation, load_annotations, resolve_visibility
 from .complete import ObjectCompletion, complete_object
 from .graph import OcclusionEdge, build_occlusion_graph, derive_dilation_radius
+from .refine import refine_annotations
 
 
 @dataclass
@@ -30,8 +32,12 @@ class OrchestrationResult:
 
 
 def orchestrate(image_bgr: np.ndarray, shapes: list[dict], *,
-                restore: bool = True) -> OrchestrationResult:
-    """작품 이미지 + labelme shapes → 객체별 아모달 완성."""
+                restore: bool = True, refiner=None) -> OrchestrationResult:
+    """작품 이미지 + labelme shapes → 객체별 아모달 완성.
+
+    refiner 가 주어지면(예: v1 SAMMaskRefiner) 어노테이션 마스크를
+    정련한 뒤 그래프를 계산한다. 계약은 refine.refine_annotations 참조.
+    """
     img = np.asarray(image_bgr)
     if restore:
         gate = self_competition_gate(img)
@@ -41,6 +47,9 @@ def orchestrate(image_bgr: np.ndarray, shapes: list[dict], *,
 
     dec = decompose(restored)  # 전 객체가 공유하는 단일 분해 (dec 는 불변으로 취급)
     annotations = load_annotations(shapes, restored.shape[:2])
+    if refiner is not None:
+        rgb = cv2.cvtColor(restored, cv2.COLOR_BGR2RGB)  # SAM 계약은 RGB
+        annotations = refine_annotations(rgb, annotations, refiner)
     visibles = resolve_visibility(annotations)
     radius = derive_dilation_radius(dec.skeleton, dec.width_map,
                                     restored.shape[:2])
